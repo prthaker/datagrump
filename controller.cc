@@ -1,21 +1,31 @@
 #include <stdio.h>
+#include <algorithm>
 
 #include "controller.hh"
 #include "timestamp.hh"
 
 using namespace Network;
 
+const double alpha = 2;
+const double beta = 2;
+const double rtt_weight = 0.75;
+
+double aimd_wind; //in packets
+double rtt; //in ms
+
 /* Default constructor */
 Controller::Controller( const bool debug )
   : debug_( debug )
 {
+  aimd_wind = 2;
+  rtt = 100; //initial rtt estimate
 }
 
 /* Get current window size, in packets */
 unsigned int Controller::window_size( void )
 {
   /* Default: fixed window size of one outstanding packet */
-  int the_window_size = 1;
+  int the_window_size = (int)aimd_wind;
 
   if ( debug_ ) {
     fprintf( stderr, "At time %lu, return window_size = %d.\n",
@@ -48,7 +58,17 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
 			       const uint64_t timestamp_ack_received )
                                /* when the ack was received (by sender) */
 {
-  /* Default: take no action */
+  uint64_t new_rtt = timestamp_ack_received - recv_timestamp_acked;
+  
+  if(new_rtt > rtt){
+    aimd_wind = aimd_wind/beta;
+  } else {
+    aimd_wind = aimd_wind + alpha;
+  }
+
+  aimd_wind = std::max(1.0, aimd_wind);
+
+  rtt = (rtt_weight * rtt) + (1-rtt_weight)*(new_rtt);
 
   if ( debug_ ) {
     fprintf( stderr, "At time %lu, received ACK for packet %lu",
